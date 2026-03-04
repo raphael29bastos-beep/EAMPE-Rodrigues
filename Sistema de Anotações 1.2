@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Consulta de Anotações - EAMPE</title>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif; }
+
+    body {
+      min-height: 100vh;
+      padding: 40px 20px;
+      color: #1a1a1a;
+      background-image:
+        linear-gradient(rgba(0, 35, 90, 0.85), rgba(0, 35, 90, 0.85)),
+        url("https://upload.wikimedia.org/wikipedia/en/0/05/Flag_of_Brazil.svg");
+      background-size: cover;
+      background-position: center;
+      background-attachment: fixed;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 980px;
+      margin: 0 auto;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(6px);
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      padding: 26px;
+    }
+
+    h1 { text-align: center; color: #0b2c5f; margin-bottom: 8px; font-size: 28px; }
+    .subtitle { text-align: center; color: #555; margin-bottom: 22px; }
+
+    .row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+    .row.tight { margin-bottom: 8px; }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid #cfd7e3;
+      border-radius: 10px;
+      font-size: 15px;
+      outline: none;
+      background: #fff;
+    }
+    textarea { min-height: 110px; resize: vertical; }
+    input:focus, select:focus, textarea:focus { border-color: #0b2c5f; }
+
+    button {
+      background: #0b2c5f;
+      color: #fff;
+      border: none;
+      padding: 12px 16px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 15px;
+      white-space: nowrap;
+    }
+    button:hover { background: #123d7d; }
+
+    .btn-secondary { background: #6c757d; }
+    .btn-secondary:hover { background: #5a6268; }
+
+    .btn-danger { background: #b02a37; }
+    .btn-danger:hover { background: #8f1f2a; }
+
+    .message {
+      display: none;
+      margin: 10px 0 14px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-weight: bold;
+    }
+    .message.success { background: #e7f4ea; color: #166534; display: block; }
+    .message.error { background: #ffe5e5; color: #b00020; display: block; }
+
+    .divider { height: 1px; background: #dbe4f0; margin: 22px 0; }
+
+    .card {
+      background: #eef4ff;
+      border-left: 5px solid #0b2c5f;
+      padding: 14px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+    }
+
+    .inline-title { font-size: 16px; font-weight: bold; color: #0b2c5f; margin-bottom: 6px; }
+    .muted { color:#555; font-size: 13px; }
+
+    .notes-wrap { margin-top: 10px; }
+    .note-card {
+      border: 1px solid #dde4ee;
+      border-radius: 12px;
+      padding: 14px;
+      background: #fafcff;
+      margin-bottom: 12px;
+    }
+    .note-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+    .badge {
+      padding: 5px 10px;
+      border-radius: 999px;
+      color: #fff;
+      font-size: 12px;
+      font-weight: bold;
+      text-transform: capitalize;
+    }
+    .positive { background: #198754; }
+    .negative { background: #dc3545; }
+
+    .stamp { font-size: 12px; color: #6b7280; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
+    /* Eye button */
+    .pw-wrap { display: flex; gap: 8px; width: 100%; }
+    .pw-wrap input { flex: 1; }
+    .eye-btn {
+      width: 54px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      background: #0b2c5f;
+      color: #fff;
+      font-size: 18px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .eye-btn:hover { background: #123d7d; }
+
+    /* Gear */
+    .gear-bar { display: none; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+    .gear-btn {
+      width: 46px; height: 46px;
+      border-radius: 50%;
+      background: #0b2c5f;
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .gear-btn:hover { background: #123d7d; }
+    .gear-menu { display: none; margin-top: 10px; }
+
+    /* Students list */
+    .student-list { margin-top: 12px; }
+    .student-item {
+      padding: 10px 12px;
+      border: 1px solid #dde4ee;
+      border-radius: 10px;
+      background: #f8fbff;
+      cursor: pointer;
+      margin-bottom: 8px;
+    }
+    .student-item:hover { background: #eef4ff; }
+
+    /* Label like field */
+    .hint {
+      padding: 12px 14px;
+      border: 1px dashed #cfd7e3;
+      border-radius: 10px;
+      background: #fff;
+      color: #0b2c5f;
+      font-weight: bold;
+      width: 100%;
+    }
+
+    @media (max-width: 640px) {
+      .container { padding: 18px; }
+      h1 { font-size: 24px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>Consulta de Anotações - EAMPE</h1>
+    <p class="subtitle">Digite seu <b>N° de Bordo</b> para visualizar suas anotações.</p>
+
+    <!-- Consulta pública -->
+    <div class="row">
+      <input id="nipInput" placeholder="Digite seu N° de Bordo" />
+      <button onclick="buscarAnotacoes()">Consultar</button>
+    </div>
+
+    <div id="studentBox" class="card" style="display:none;"></div>
+    <div id="msg" class="message"></div>
+    <div id="notesList" class="notes-wrap"></div>
+
+    <div class="divider"></div>
+
+    <!-- ADM -->
+    <div class="card">
+      <div class="inline-title">Área do ADM</div>
+
+      <div class="row tight">
+        <div class="pw-wrap">
+          <input id="adminPassword" type="password" placeholder="Senha ADM" />
+          <div class="eye-btn" onclick="toggleSenha()" title="Mostrar/ocultar senha">👁</div>
+        </div>
+        <button onclick="entrarAdmin()">Entrar</button>
+      </div>
+
+      <div id="adminMsg" class="message"></div>
+
+      <!-- Barra com engrenagem -->
+      <div id="gearBar" class="gear-bar">
+        <div style="font-weight:bold;color:#0b2c5f;">ADM logado</div>
+        <div class="gear-btn" onclick="toggleGearMenu()" title="Menu">⚙️</div>
+      </div>
+
+      <!-- Menu engrenagem -->
+      <div id="gearMenu" class="gear-menu">
+        <div class="row">
+          <button onclick="abrirAlunos()">Alunos</button>
+          <button class="btn-secondary" onclick="abrirAddObs()">Adicionar observação</button>
+          <button class="btn-danger" onclick="resetarDados()">Resetar dados</button>
+          <button class="btn-secondary" onclick="sairAdmin()">Sair</button>
+        </div>
+
+        <!-- Painel ALUNOS -->
+        <div id="alunosPanel" style="display:none;">
+          <div class="inline-title">Alunos</div>
+
+          <div class="row">
+            <input id="buscaAluno" placeholder="🔎 Pesquisar por nome ou N° de Bordo" />
+            <button onclick="filtrarAlunos()">Buscar</button>
+            <button class="btn-secondary" onclick="limparBusca()">Limpar</button>
+          </div>
+
+          <div class="card" style="background:#fff">
+            <div class="inline-title">Cadastrar aluno</div>
+            <div class="row">
+              <input id="cadNip" placeholder="N° de Bordo" />
+              <input id="cadNome" placeholder="Nome" />
+            </div>
+            <div class="row">
+              <button onclick="cadastrarAluno()">Cadastrar</button>
+            </div>
+            <div id="cadMsg" class="message"></div>
+          </div>
+
+          <div id="listaAlunos" class="student-list"></div>
+
+          <!-- Detalhes do aluno -->
+          <div id="detalheAluno" style="display:none; margin-top:14px;"></div>
+        </div>
+
+        <!-- Painel ADICIONAR OBS -->
+        <div id="addObsPanel" style="display:none;">
+          <div class="inline-title">Adicionar observação</div>
+
+          <div class="row">
+            <input id="obsNip" placeholder="N° de Bordo do aluno" />
+            <div id="obsNomeAuto" class="hint">Nome: (digite um N° de Bordo cadastrado)</div>
+          </div>
+
+          <div class="row">
+            <select id="obsTipo">
+              <option value="positiva">Positiva</option>
+              <option value="negativa">Negativa</option>
+            </select>
+          </div>
+
+          <div class="row">
+            <textarea id="obsTexto" placeholder="Motivo da observação"></textarea>
+          </div>
+
+          <div class="row">
+            <button onclick="adicionarObservacao()">Adicionar</button>
+          </div>
+
+          <div id="obsMsg" class="message"></div>
+          <div class="muted">* Para adicionar observação, o aluno precisa estar cadastrado.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const SENHA_ADM = "E@mpeADM";
+  const STORAGE_KEY = "eampe_data_v5";
+
+  let dados = carregar();
+  let adminLogado = false;
+
+  // ===== Utils =====
+  function uid() {
+    return Math.random().toString(16).slice(2) + "-" + Date.now().toString(16);
+  }
+  function agora() {
+    return new Date().toLocaleString();
+  }
+  function escapeHtml(str) {
+    return String(str ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+  function escapeAttr(str) {
+    return escapeHtml(str).replaceAll("`", "&#096;");
+  }
+  function setMsg(elId, text, type) {
+    const el = document.getElementById(elId);
+    el.className = "message " + (type || "");
+    el.textContent = text || "";
+    el.style.display = text ? "block" : "none";
+  }
+
+  // ===== Storage =====
+  function carregar() {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      const vazio = {}; // sem alunos cadastrados
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(vazio));
+      return vazio;
+    }
+    try { return JSON.parse(raw) || {}; }
+    catch {
+      const vazio = {};
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(vazio));
+      return vazio;
+    }
+  }
+  function salvar() { localStorage.setItem(STORAGE_KEY, JSON.stringify(dados)); }
+
+  // ===== Público: consultar N° de Bordo =====
+  function buscarAnotacoes() {
+    const nip = document.getElementById("nipInput").value.trim();
+    document.getElementById("notesList").innerHTML = "";
+    document.getElementById("studentBox").style.display = "none";
+    setMsg("msg", "", "");
+
+    if (!nip) { setMsg("msg", "Por favor, digite um N° de Bordo.", "error"); return; }
+
+    const aluno = dados[nip];
+    if (!aluno) { setMsg("msg", "N° de Bordo não encontrado.", "error"); return; }
+
+    setMsg("msg", "Anotações encontradas com sucesso.", "success");
+
+    const sb = document.getElementById("studentBox");
+    sb.style.display = "block";
+    sb.innerHTML = `<div class="inline-title">${escapeHtml(aluno.nome)}</div><div><b>N° de Bordo:</b> ${escapeHtml(nip)}</div>`;
+
+    renderNotasPublico(nip);
+  }
+
+  function renderNotasPublico(nip) {
+    const aluno = dados[nip];
+    const wrap = document.getElementById("notesList");
+    wrap.innerHTML = "";
+
+    const notas = aluno.notas || [];
+    if (notas.length === 0) {
+      wrap.innerHTML = `<div class="note-card">Nenhuma anotação encontrada para este N° de Bordo.</div>`;
+      return;
+    }
+
+    notas.forEach(n => {
+      const stamp = n.atualizadoEm ? `Editado em: ${n.atualizadoEm}` : `Adicionado em: ${n.criadoEm}`;
+      wrap.innerHTML += `
+        <div class="note-card">
+          <div class="note-header">
+            <span class="badge ${n.tipo === "positiva" ? "positive" : "negative"}">${escapeHtml(n.tipo)}</span>
+            <span class="stamp">${escapeHtml(stamp)}</span>
+          </div>
+          <div>${escapeHtml(n.texto)}</div>
+        </div>
+      `;
+    });
+  }
+
+  // ===== ADM =====
+  function toggleSenha() {
+    const inp = document.getElementById("adminPassword");
+    inp.type = inp.type === "password" ? "text" : "password";
+  }
+
+  function entrarAdmin() {
+    const senha = document.getElementById("adminPassword").value;
+    setMsg("adminMsg", "", "");
+
+    if (senha !== SENHA_ADM) {
+      adminLogado = false;
+      document.getElementById("gearBar").style.display = "none";
+      document.getElementById("gearMenu").style.display = "none";
+      setMsg("adminMsg", "A senha está errada, tente novamente.", "error");
+      return;
+    }
+
+    adminLogado = true;
+    setMsg("adminMsg", "Acesso liberado com sucesso.", "success");
+    document.getElementById("gearBar").style.display = "flex";
+  }
+
+  function sairAdmin() {
+    adminLogado = false;
+    document.getElementById("adminPassword").value = "";
+    document.getElementById("gearBar").style.display = "none";
+    document.getElementById("gearMenu").style.display = "none";
+    document.getElementById("alunosPanel").style.display = "none";
+    document.getElementById("addObsPanel").style.display = "none";
+    document.getElementById("detalheAluno").style.display = "none";
+    setMsg("adminMsg", "", "");
+    setMsg("cadMsg", "", "");
+    setMsg("obsMsg", "", "");
+  }
+
+  function toggleGearMenu() {
+    if (!adminLogado) return;
+    const m = document.getElementById("gearMenu");
+    m.style.display = (m.style.display === "block") ? "none" : "block";
+  }
+
+  function abrirAlunos() {
+    if (!adminLogado) return;
+    document.getElementById("alunosPanel").style.display = "block";
+    document.getElementById("addObsPanel").style.display = "none";
+    document.getElementById("detalheAluno").style.display = "none";
+    setMsg("cadMsg", "", "");
+    listarAlunos();
+  }
+
+  function abrirAddObs() {
+    if (!adminLogado) return;
+    document.getElementById("addObsPanel").style.display = "block";
+    document.getElementById("alunosPanel").style.display = "none";
+    document.getElementById("detalheAluno").style.display = "none";
+    setMsg("obsMsg", "", "");
+    atualizarNomeAuto();
+  }
+
+  // ===== Cadastro aluno =====
+  function cadastrarAluno() {
+    const nip = document.getElementById("cadNip").value.trim();
+    const nome = document.getElementById("cadNome").value.trim();
+    setMsg("cadMsg", "", "");
+
+    if (!nip || !nome) { setMsg("cadMsg", "Preencha N° de Bordo e Nome.", "error"); return; }
+    if (dados[nip]) { setMsg("cadMsg", "Esse N° de Bordo já está cadastrado.", "error"); return; }
+
+    dados[nip] = { nome, notas: [] };
+    salvar();
+
+    setMsg("cadMsg", "Aluno cadastrado com sucesso.", "success");
+    document.getElementById("cadNip").value = "";
+    document.getElementById("cadNome").value = "";
+
+    listarAlunos(document.getElementById("buscaAluno").value.trim());
+    atualizarNomeAuto();
+  }
+
+  // ===== Lista / Busca alunos =====
+  function listarAlunos(filtro) {
+    const lista = document.getElementById("listaAlunos");
+    lista.innerHTML = "";
+
+    const entries = Object.entries(dados);
+    const f = (filtro || "").toLowerCase();
+
+    if (entries.length === 0) {
+      lista.innerHTML = `<div class="note-card">Nenhum aluno cadastrado ainda.</div>`;
+      return;
+    }
+
+    entries
+      .sort((a,b) => (a[1].nome || "").localeCompare(b[1].nome || ""))
+      .forEach(([nip, aluno]) => {
+        const nomeLower = (aluno.nome || "").toLowerCase();
+        if (f && !nomeLower.includes(f) && !nip.includes(f)) return;
+
+        lista.innerHTML += `
+          <div class="student-item" onclick="abrirAlunoDetalhe('${escapeAttr(nip)}')">
+            <b>${escapeHtml(aluno.nome || ("Aluno " + nip))}</b><br/>
+            <span class="muted">N° de Bordo: ${escapeHtml(nip)} • Obs: ${(aluno.notas || []).length}</span>
+          </div>
+        `;
+      });
+  }
+
+  function filtrarAlunos() {
+    const f = document.getElementById("buscaAluno").value.trim();
+    listarAlunos(f);
+  }
+
+  function limparBusca() {
+    document.getElementById("buscaAluno").value = "";
+    listarAlunos("");
+  }
+
+  // ===== Detalhe aluno: editar nome/n° de bordo e remover =====
+  function abrirAlunoDetalhe(nip) {
+    const aluno = dados[nip];
+    if (!aluno) return;
+
+    const box = document.getElementById("detalheAluno");
+    box.style.display = "block";
+
+    const notas = aluno.notas || [];
+
+    let html = `
+      <div class="card" style="background:#ffffff">
+        <div class="inline-title">Editar aluno</div>
+
+        <div class="row">
+          <input id="editNomeAluno" value="${escapeAttr(aluno.nome)}" placeholder="Nome do aluno" />
+          <input id="editNipAluno" value="${escapeAttr(nip)}" placeholder="N° de Bordo do aluno" />
+        </div>
+
+        <div class="row">
+          <button onclick="salvarNomeNipAluno('${escapeAttr(nip)}')">Salvar alterações</button>
+          <button class="btn-danger" onclick="removerAluno('${escapeAttr(nip)}')">Remover aluno</button>
+        </div>
+
+        <div class="muted">* Ao editar o N° de Bordo, as observações vão junto para o novo N° de Bordo.</div>
+      </div>
+
+      <div class="inline-title" style="margin:10px 0;">Observações</div>
+    `;
+
+    if (notas.length === 0) {
+      html += `<div class="note-card">Sem observações para este aluno.</div>`;
+    } else {
+      notas.forEach(n => {
+        const stamp = n.atualizadoEm ? `Editado em: ${n.atualizadoEm}` : `Adicionado em: ${n.criadoEm}`;
+        html += `
+          <div class="note-card">
+            <div class="note-header">
+              <span class="badge ${n.tipo === "positiva" ? "positive" : "negative"}">${escapeHtml(n.tipo)}</span>
+              <span class="stamp">${escapeHtml(stamp)}</span>
+            </div>
+            <div>${escapeHtml(n.texto)}</div>
+
+            <div class="actions">
+              <button class="btn-secondary" onclick="editarObservacao('${escapeAttr(nip)}','${escapeAttr(n.id)}')">Editar</button>
+              <button class="btn-danger" onclick="removerObservacao('${escapeAttr(nip)}','${escapeAttr(n.id)}')">Remover</button>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    box.innerHTML = html;
+  }
+
+  function salvarNomeNipAluno(nipAntigo) {
+    const nomeNovo = (document.getElementById("editNomeAluno").value || "").trim();
+    const nipNovo = (document.getElementById("editNipAluno").value || "").trim();
+
+    if (!nomeNovo) { alert("Digite um nome válido."); return; }
+    if (!nipNovo) { alert("Digite um N° de Bordo válido."); return; }
+
+    if (nipNovo !== nipAntigo && dados[nipNovo]) {
+      alert("Esse N° de Bordo já existe. Escolha outro.");
+      return;
+    }
+
+    const aluno = dados[nipAntigo];
+    if (!aluno) return;
+
+    aluno.nome = nomeNovo;
+
+    if (nipNovo === nipAntigo) {
+      salvar();
+      listarAlunos(document.getElementById("buscaAluno").value.trim());
+      abrirAlunoDetalhe(nipAntigo);
+      atualizarNomeAuto();
+      return;
+    }
+
+    dados[nipNovo] = aluno;
+    delete dados[nipAntigo];
+    salvar();
+
+    listarAlunos(document.getElementById("buscaAluno").value.trim());
+    abrirAlunoDetalhe(nipNovo);
+    atualizarNomeAuto();
+
+    const consultado = document.getElementById("nipInput").value.trim();
+    if (consultado === nipAntigo) {
+      document.getElementById("nipInput").value = nipNovo;
+      buscarAnotacoes();
+    }
+  }
+
+  function removerAluno(nip) {
+    if (!confirm("Remover este aluno e TODAS as observações?")) return;
+    delete dados[nip];
+    salvar();
+
+    document.getElementById("detalheAluno").style.display = "none";
+    listarAlunos(document.getElementById("buscaAluno").value.trim());
+    atualizarNomeAuto();
+
+    if (document.getElementById("nipInput").value.trim() === nip) {
+      document.getElementById("nipInput").value = "";
+      document.getElementById("notesList").innerHTML = "";
+      document.getElementById("studentBox").style.display = "none";
+      setMsg("msg", "Aluno removido. Consulte outro N° de Bordo.", "success");
+    }
+  }
+
+  // ===== Observações =====
+  function atualizarNomeAuto() {
+    const nip = document.getElementById("obsNip").value.trim();
+    const box = document.getElementById("obsNomeAuto");
+    if (!nip) { box.textContent = "Nome: (digite um N° de Bordo cadastrado)"; return; }
+    if (!dados[nip]) { box.textContent = "Nome: (N° de Bordo não cadastrado)"; return; }
+    box.textContent = "Nome: " + dados[nip].nome;
+  }
+
+  function adicionarObservacao() {
+    const nip = document.getElementById("obsNip").value.trim();
+    const tipo = document.getElementById("obsTipo").value;
+    const texto = document.getElementById("obsTexto").value.trim();
+    setMsg("obsMsg", "", "");
+
+    if (!nip || !texto) { setMsg("obsMsg", "Preencha o N° de Bordo e o motivo da observação.", "error"); return; }
+    if (!dados[nip]) { setMsg("obsMsg", "Este N° de Bordo não está cadastrado. Cadastre o aluno antes.", "error"); return; }
+
+    dados[nip].notas = dados[nip].notas || [];
+    dados[nip].notas.unshift({ id: uid(), tipo, texto, criadoEm: agora(), atualizadoEm: null });
+
+    salvar();
+    setMsg("obsMsg", "Observação adicionada com sucesso.", "success");
+    document.getElementById("obsTexto").value = "";
+
+    if (document.getElementById("detalheAluno").style.display === "block") abrirAlunoDetalhe(nip);
+    if (document.getElementById("nipInput").value.trim() === nip) buscarAnotacoes();
+
+    listarAlunos(document.getElementById("buscaAluno").value.trim());
+  }
+
+  function editarObservacao(nip, obsId) {
+    const aluno = dados[nip];
+    if (!aluno) return;
+
+    const idx = (aluno.notas || []).findIndex(x => x.id === obsId);
+    if (idx < 0) return;
+
+    const atual = aluno.notas[idx];
+    const novoTexto = prompt("Edite o texto da observação:", atual.texto);
+    if (novoTexto === null) return;
+
+    const txt = novoTexto.trim();
+    if (!txt) { alert("Texto vazio não é permitido."); return; }
+
+    const novoTipo = prompt("Tipo (positiva ou negativa):", atual.tipo);
+    let tipo = (novoTipo || "").trim().toLowerCase();
+    if (tipo !== "positiva" && tipo !== "negativa") tipo = atual.tipo;
+
+    aluno.notas[idx].texto = txt;
+    aluno.notas[idx].tipo = tipo;
+    aluno.notas[idx].atualizadoEm = agora();
+    salvar();
+
+    abrirAlunoDetalhe(nip);
+    if (document.getElementById("nipInput").value.trim() === nip) buscarAnotacoes();
+  }
+
+  function removerObservacao(nip, obsId) {
+    if (!confirm("Remover esta observação?")) return;
+    const aluno = dados[nip];
+    if (!aluno) return;
+
+    aluno.notas = (aluno.notas || []).filter(x => x.id !== obsId);
+    salvar();
+
+    abrirAlunoDetalhe(nip);
+    if (document.getElementById("nipInput").value.trim() === nip) buscarAnotacoes();
+    listarAlunos(document.getElementById("buscaAluno").value.trim());
+  }
+
+  function resetarDados() {
+    if (!confirm("Apagar tudo e voltar ao zero (sem alunos)?")) return;
+    const vazio = {};
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(vazio));
+    dados = vazio;
+
+    document.getElementById("nipInput").value = "";
+    document.getElementById("notesList").innerHTML = "";
+    document.getElementById("studentBox").style.display = "none";
+    setMsg("msg", "", "");
+
+    document.getElementById("listaAlunos").innerHTML = "";
+    document.getElementById("detalheAluno").style.display = "none";
+
+    document.getElementById("cadNip").value = "";
+    document.getElementById("cadNome").value = "";
+    document.getElementById("obsNip").value = "";
+    document.getElementById("obsTexto").value = "";
+    atualizarNomeAuto();
+
+    setMsg("adminMsg", "Dados resetados (zero alunos).", "success");
+    setMsg("cadMsg", "", "");
+    setMsg("obsMsg", "", "");
+  }
+
+  // Events
+  document.getElementById("nipInput").addEventListener("keypress", e => {
+    if (e.key === "Enter") buscarAnotacoes();
+  });
+  document.getElementById("adminPassword").addEventListener("keypress", e => {
+    if (e.key === "Enter") entrarAdmin();
+  });
+  document.getElementById("obsNip").addEventListener("input", atualizarNomeAuto);
+</script>
+
+</body>
+</html>
