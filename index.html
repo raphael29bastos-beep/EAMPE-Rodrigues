@@ -213,9 +213,11 @@
     <div class="card">
       <div class="inline-title">Área do ADM</div>
 
+      <!-- ✅ Login Firebase (Email + Senha) -->
       <div class="row tight">
+        <input id="adminEmail" type="email" placeholder="Email ADM" autocomplete="username" />
         <div class="pw-wrap">
-          <input id="adminPassword" type="password" placeholder="Senha ADM" />
+          <input id="adminPassword" type="password" placeholder="Senha ADM" autocomplete="current-password" />
           <div class="eye-btn" onclick="toggleSenha()" title="Mostrar/ocultar senha">👁</div>
         </div>
         <button onclick="entrarAdmin()">Entrar</button>
@@ -247,7 +249,7 @@
             <button class="btn-secondary" onclick="limparBusca()">Limpar</button>
           </div>
 
-          <!-- ✅ Filtros novos -->
+          <!-- ✅ Filtros -->
           <div class="filters">
             <select id="filtroPelotao" onchange="aplicarFiltrosAlunos()">
               <option value="">Pelotão: Todos</option>
@@ -314,10 +316,16 @@
     </div>
   </div>
 
-  <!-- Firebase Realtime DB -->
+  <!-- ✅ Firebase Realtime DB + Auth (Email/Senha) -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+    import {
+      getAuth,
+      signInWithEmailAndPassword,
+      signOut,
+      onAuthStateChanged
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyCH9AuvD9AoOp3QJV-ctpylnGJdhISpwKo",
@@ -332,6 +340,8 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
+    const auth = getAuth(app);
+
     const dadosRef = ref(db, "dados");
 
     // ✅ CARGA INICIAL (seed) — só se estiver vazio (null)
@@ -515,485 +525,572 @@
       "2328": { nome: "COUTINHO", notas: [] }
     };
 
+    // 🔌 Ponte Firebase -> JS "normal"
     window.__fb = {
-      salvar(dados) { return set(dadosRef, dados); },
-      escutar(callback) { return onValue(dadosRef, (snap) => callback(snap.val())); },
-      seedIfEmpty() { return set(dadosRef, DEFAULT_DADOS); }
+      // leitura pública
+      escutar(callback) {
+        return onValue(dadosRef, (snap) => callback(snap.val()));
+      },
+
+      // gravação (vai falhar se não estiver logado e as Rules estiverem ".write": "auth != null")
+      salvar(dados) {
+        return set(dadosRef, dados);
+      },
+
+      // seed (somente quando banco está vazio)
+      seedIfEmpty() {
+        return set(dadosRef, DEFAULT_DADOS);
+      },
+
+      // auth
+      login(email, senha) {
+        return signInWithEmailAndPassword(auth, email, senha);
+      },
+      logout() {
+        return signOut(auth);
+      },
+      onAuth(callback) {
+        return onAuthStateChanged(auth, callback);
+      }
     };
   </script>
 
-<script>
-  const SENHA_ADM = "E@mpeADM";
-  let dados = {};
-  let adminLogado = false;
-  let seeded = false;
+  <script>
+    let dados = {};
+    let adminLogado = false;
+    let seeded = false;
 
-  // filtros
-  let filtroPelotaoAtual = "";
-  let ordemAtual = "alfabetica";
+    // filtros
+    let filtroPelotaoAtual = "";
+    let ordemAtual = "alfabetica";
 
-  function uid() {
-    return Math.random().toString(16).slice(2) + "-" + Date.now().toString(16);
-  }
-  function agora() {
-    return new Date().toLocaleString();
-  }
-  function escapeHtml(str) {
-    return String(str ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
-  function escapeAttr(str) {
-    return escapeHtml(str).replaceAll("`", "&#096;");
-  }
-  function setMsg(elId, text, type) {
-    const el = document.getElementById(elId);
-    el.className = "message " + (type || "");
-    el.textContent = text || "";
-    el.style.display = text ? "block" : "none";
-  }
-
-  function salvar() {
-    if (!window.__fb) return;
-    window.__fb.salvar(dados);
-  }
-
-  function getPelotaoFromBordo(nip) {
-    const s = String(nip || "").trim();
-    if (s.length < 2) return "";
-    return s.slice(0, 2); // 1101 -> "11"
-  }
-
-  function aplicarFiltrosAlunos() {
-    const pel = document.getElementById("filtroPelotao").value;
-    const ord = document.getElementById("ordemAlunos").value;
-    filtroPelotaoAtual = pel || "";
-    ordemAtual = ord || "alfabetica";
-
-    listarAlunos(document.getElementById("buscaAluno").value.trim());
-  }
-
-  function syncUIDepoisDeAtualizarDados() {
-    atualizarNomeAuto();
-
-    const nipConsultado = document.getElementById("nipInput").value.trim();
-    const studentBoxVisivel = document.getElementById("studentBox").style.display === "block";
-    if (nipConsultado && studentBoxVisivel && dados[nipConsultado]) {
-      renderNotasPublico(nipConsultado);
+    function uid() {
+      return Math.random().toString(16).slice(2) + "-" + Date.now().toString(16);
+    }
+    function agora() {
+      return new Date().toLocaleString();
+    }
+    function escapeHtml(str) {
+      return String(str ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+    function escapeAttr(str) {
+      return escapeHtml(str).replaceAll("`", "&#096;");
+    }
+    function setMsg(elId, text, type) {
+      const el = document.getElementById(elId);
+      el.className = "message " + (type || "");
+      el.textContent = text || "";
+      el.style.display = text ? "block" : "none";
     }
 
-    const alunosPanelAberto = document.getElementById("alunosPanel").style.display === "block";
-    if (alunosPanelAberto) {
-      listarAlunos(document.getElementById("buscaAluno").value.trim());
-      const detalheAberto = document.getElementById("detalheAluno").style.display === "block";
-      if (detalheAberto) {
-        const editNipEl = document.getElementById("editNipAluno");
-        if (editNipEl) {
-          const nip = editNipEl.value.trim();
-          if (nip && dados[nip]) abrirAlunoDetalhe(nip);
+    function salvarComTratamento(msgElId) {
+      if (!window.__fb) return Promise.resolve();
+      return window.__fb.salvar(dados).catch((err) => {
+        console.error("Erro ao salvar no Firebase:", err);
+        const code = (err && err.code) ? String(err.code) : "";
+        // Quando Rules bloqueiam, normalmente vem PERMISSION_DENIED
+        if (code.includes("PERMISSION_DENIED")) {
+          setMsg(msgElId || "adminMsg", "Sem permissão para salvar. Faça login de ADM.", "error");
+        } else {
+          setMsg(msgElId || "adminMsg", "Falha ao salvar no banco. Verifique conexão/regras.", "error");
         }
-      }
-    }
-  }
-
-  // ===== Público =====
-  function buscarAnotacoes() {
-    const nip = document.getElementById("nipInput").value.trim();
-    document.getElementById("notesList").innerHTML = "";
-    document.getElementById("studentBox").style.display = "none";
-    setMsg("msg", "", "");
-
-    if (!nip) { setMsg("msg", "Por favor, digite um N° de Bordo.", "error"); return; }
-
-    const aluno = dados[nip];
-    if (!aluno) { setMsg("msg", "N° de Bordo não encontrado.", "error"); return; }
-
-    setMsg("msg", "Anotações encontradas com sucesso.", "success");
-
-    const sb = document.getElementById("studentBox");
-    sb.style.display = "block";
-    sb.innerHTML = `<div class="inline-title">${escapeHtml(aluno.nome)}</div><div><b>N° de Bordo:</b> ${escapeHtml(nip)}</div>`;
-
-    renderNotasPublico(nip);
-  }
-
-  function renderNotasPublico(nip) {
-    const aluno = dados[nip];
-    const wrap = document.getElementById("notesList");
-    wrap.innerHTML = "";
-
-    const notas = (aluno && aluno.notas) ? aluno.notas : [];
-    if (notas.length === 0) {
-      wrap.innerHTML = `<div class="note-card">Nenhuma anotação encontrada para este N° de Bordo.</div>`;
-      return;
-    }
-
-    notas.forEach(n => {
-      const stamp = n.atualizadoEm ? `Editado em: ${n.atualizadoEm}` : `Adicionado em: ${n.criadoEm}`;
-      wrap.innerHTML += `
-        <div class="note-card">
-          <div class="note-header">
-            <span class="badge ${n.tipo === "positiva" ? "positive" : "negative"}">${escapeHtml(n.tipo)}</span>
-            <span class="stamp">${escapeHtml(stamp)}</span>
-          </div>
-          <div>${escapeHtml(n.texto)}</div>
-        </div>
-      `;
-    });
-  }
-
-  // ===== ADM =====
-  function toggleSenha() {
-    const inp = document.getElementById("adminPassword");
-    inp.type = inp.type === "password" ? "text" : "password";
-  }
-
-  function entrarAdmin() {
-    const senha = document.getElementById("adminPassword").value;
-    setMsg("adminMsg", "", "");
-
-    if (senha !== SENHA_ADM) {
-      adminLogado = false;
-      document.getElementById("gearBar").style.display = "none";
-      document.getElementById("gearMenu").style.display = "none";
-      setMsg("adminMsg", "A senha está errada, tente novamente.", "error");
-      return;
-    }
-
-    adminLogado = true;
-    setMsg("adminMsg", "Acesso liberado com sucesso.", "success");
-    document.getElementById("gearBar").style.display = "flex";
-  }
-
-  function sairAdmin() {
-    adminLogado = false;
-    document.getElementById("adminPassword").value = "";
-    document.getElementById("gearBar").style.display = "none";
-    document.getElementById("gearMenu").style.display = "none";
-    document.getElementById("alunosPanel").style.display = "none";
-    document.getElementById("addObsPanel").style.display = "none";
-    document.getElementById("detalheAluno").style.display = "none";
-    setMsg("adminMsg", "", "");
-    setMsg("cadMsg", "", "");
-    setMsg("obsMsg", "", "");
-  }
-
-  function toggleGearMenu() {
-    if (!adminLogado) return;
-    const m = document.getElementById("gearMenu");
-    m.style.display = (m.style.display === "block") ? "none" : "block";
-  }
-
-  function abrirAlunos() {
-    if (!adminLogado) return;
-    document.getElementById("alunosPanel").style.display = "block";
-    document.getElementById("addObsPanel").style.display = "none";
-    document.getElementById("detalheAluno").style.display = "none";
-    setMsg("cadMsg", "", "");
-    // garante que selects estejam sincronizados
-    document.getElementById("filtroPelotao").value = filtroPelotaoAtual;
-    document.getElementById("ordemAlunos").value = ordemAtual;
-    listarAlunos();
-  }
-
-  function abrirAddObs() {
-    if (!adminLogado) return;
-    document.getElementById("addObsPanel").style.display = "block";
-    document.getElementById("alunosPanel").style.display = "none";
-    document.getElementById("detalheAluno").style.display = "none";
-    setMsg("obsMsg", "", "");
-    atualizarNomeAuto();
-  }
-
-  // ===== Cadastro aluno =====
-  function cadastrarAluno() {
-    const nip = document.getElementById("cadNip").value.trim();
-    const nome = document.getElementById("cadNome").value.trim();
-    setMsg("cadMsg", "", "");
-
-    if (!nip || !nome) { setMsg("cadMsg", "Preencha N° de Bordo e Nome.", "error"); return; }
-    if (dados[nip]) { setMsg("cadMsg", "Esse N° de Bordo já está cadastrado.", "error"); return; }
-
-    dados[nip] = { nome, notas: [] };
-    salvar();
-
-    setMsg("cadMsg", "Aluno cadastrado com sucesso.", "success");
-    document.getElementById("cadNip").value = "";
-    document.getElementById("cadNome").value = "";
-
-    listarAlunos(document.getElementById("buscaAluno").value.trim());
-    atualizarNomeAuto();
-  }
-
-  // ===== Lista / Busca alunos =====
-  function listarAlunos(filtroTexto) {
-    const lista = document.getElementById("listaAlunos");
-    lista.innerHTML = "";
-
-    let entries = Object.entries(dados || {});
-    const f = (filtroTexto || "").toLowerCase();
-
-    // filtro pelotão
-    if (filtroPelotaoAtual) {
-      entries = entries.filter(([nip]) => getPelotaoFromBordo(nip) === filtroPelotaoAtual);
-    }
-
-    // filtro texto (nome ou nip)
-    if (f) {
-      entries = entries.filter(([nip, aluno]) => {
-        const nomeLower = (aluno.nome || "").toLowerCase();
-        return nomeLower.includes(f) || String(nip).includes(f);
+        throw err;
       });
     }
 
-    // ordenação
-    if (ordemAtual === "numero") {
-      entries.sort((a, b) => Number(a[0]) - Number(b[0]));
-    } else {
-      entries.sort((a, b) => (a[1].nome || "").localeCompare(b[1].nome || ""));
+    function getPelotaoFromBordo(nip) {
+      const s = String(nip || "").trim();
+      if (s.length < 2) return "";
+      return s.slice(0, 2); // 1101 -> "11"
     }
 
-    if (entries.length === 0) {
-      lista.innerHTML = `<div class="note-card">Nenhum aluno encontrado com esses filtros.</div>`;
-      return;
+    function aplicarFiltrosAlunos() {
+      const pel = document.getElementById("filtroPelotao").value;
+      const ord = document.getElementById("ordemAlunos").value;
+      filtroPelotaoAtual = pel || "";
+      ordemAtual = ord || "alfabetica";
+      listarAlunos(document.getElementById("buscaAluno").value.trim());
     }
 
-    entries.forEach(([nip, aluno]) => {
-      const pel = getPelotaoFromBordo(nip) || "--";
-      lista.innerHTML += `
-        <div class="student-item" onclick="abrirAlunoDetalhe('${escapeAttr(nip)}')">
-          <b>${escapeHtml(aluno.nome || ("Aluno " + nip))}</b><br/>
-          <span class="muted">Pelotão: ${escapeHtml(pel)} • N° de Bordo: ${escapeHtml(nip)} • Obs: ${(aluno.notas || []).length}</span>
-        </div>
-      `;
-    });
-  }
+    function syncUIDepoisDeAtualizarDados() {
+      atualizarNomeAuto();
 
-  function filtrarAlunos() {
-    const f = document.getElementById("buscaAluno").value.trim();
-    listarAlunos(f);
-  }
+      const nipConsultado = document.getElementById("nipInput").value.trim();
+      const studentBoxVisivel = document.getElementById("studentBox").style.display === "block";
+      if (nipConsultado && studentBoxVisivel && dados[nipConsultado]) {
+        renderNotasPublico(nipConsultado);
+      }
 
-  function limparBusca() {
-    document.getElementById("buscaAluno").value = "";
-    listarAlunos("");
-  }
+      const alunosPanelAberto = document.getElementById("alunosPanel").style.display === "block";
+      if (alunosPanelAberto) {
+        listarAlunos(document.getElementById("buscaAluno").value.trim());
+        const detalheAberto = document.getElementById("detalheAluno").style.display === "block";
+        if (detalheAberto) {
+          const editNipEl = document.getElementById("editNipAluno");
+          if (editNipEl) {
+            const nip = editNipEl.value.trim();
+            if (nip && dados[nip]) abrirAlunoDetalhe(nip);
+          }
+        }
+      }
+    }
 
-  // ===== Detalhe aluno =====
-  function abrirAlunoDetalhe(nip) {
-    const aluno = dados[nip];
-    if (!aluno) return;
+    // ===== Público =====
+    function buscarAnotacoes() {
+      const nip = document.getElementById("nipInput").value.trim();
+      document.getElementById("notesList").innerHTML = "";
+      document.getElementById("studentBox").style.display = "none";
+      setMsg("msg", "", "");
 
-    const box = document.getElementById("detalheAluno");
-    box.style.display = "block";
+      if (!nip) { setMsg("msg", "Por favor, digite um N° de Bordo.", "error"); return; }
 
-    const notas = aluno.notas || [];
+      const aluno = dados[nip];
+      if (!aluno) { setMsg("msg", "N° de Bordo não encontrado.", "error"); return; }
 
-    let html = `
-      <div class="card" style="background:#ffffff">
-        <div class="inline-title">Editar aluno</div>
+      setMsg("msg", "Anotações encontradas com sucesso.", "success");
 
-        <div class="row">
-          <input id="editNomeAluno" value="${escapeAttr(aluno.nome)}" placeholder="Nome do aluno" />
-          <input id="editNipAluno" value="${escapeAttr(nip)}" placeholder="N° de Bordo do aluno" />
-        </div>
+      const sb = document.getElementById("studentBox");
+      sb.style.display = "block";
+      sb.innerHTML = `<div class="inline-title">${escapeHtml(aluno.nome)}</div><div><b>N° de Bordo:</b> ${escapeHtml(nip)}</div>`;
 
-        <div class="row">
-          <button onclick="salvarNomeNipAluno('${escapeAttr(nip)}')">Salvar alterações</button>
-          <button class="btn-danger" onclick="removerAluno('${escapeAttr(nip)}')">Remover aluno</button>
-        </div>
+      renderNotasPublico(nip);
+    }
 
-        <div class="muted">* Ao editar o N° de Bordo, as observações vão junto para o novo N° de Bordo.</div>
-      </div>
+    function renderNotasPublico(nip) {
+      const aluno = dados[nip];
+      const wrap = document.getElementById("notesList");
+      wrap.innerHTML = "";
 
-      <div class="inline-title" style="margin:10px 0;">Observações</div>
-    `;
+      const notas = (aluno && aluno.notas) ? aluno.notas : [];
+      if (notas.length === 0) {
+        wrap.innerHTML = `<div class="note-card">Nenhuma anotação encontrada para este N° de Bordo.</div>`;
+        return;
+      }
 
-    if (notas.length === 0) {
-      html += `<div class="note-card">Sem observações para este aluno.</div>`;
-    } else {
       notas.forEach(n => {
         const stamp = n.atualizadoEm ? `Editado em: ${n.atualizadoEm}` : `Adicionado em: ${n.criadoEm}`;
-        html += `
+        wrap.innerHTML += `
           <div class="note-card">
             <div class="note-header">
               <span class="badge ${n.tipo === "positiva" ? "positive" : "negative"}">${escapeHtml(n.tipo)}</span>
               <span class="stamp">${escapeHtml(stamp)}</span>
             </div>
             <div>${escapeHtml(n.texto)}</div>
-
-            <div class="actions">
-              <button class="btn-secondary" onclick="editarObservacao('${escapeAttr(nip)}','${escapeAttr(n.id)}')">Editar</button>
-              <button class="btn-danger" onclick="removerObservacao('${escapeAttr(nip)}','${escapeAttr(n.id)}')">Remover</button>
-            </div>
           </div>
         `;
       });
     }
 
-    box.innerHTML = html;
-  }
-
-  function salvarNomeNipAluno(nipAntigo) {
-    const nomeNovo = (document.getElementById("editNomeAluno").value || "").trim();
-    const nipNovo = (document.getElementById("editNipAluno").value || "").trim();
-
-    if (!nomeNovo) { alert("Digite um nome válido."); return; }
-    if (!nipNovo) { alert("Digite um N° de Bordo válido."); return; }
-
-    if (nipNovo !== nipAntigo && dados[nipNovo]) {
-      alert("Esse N° de Bordo já existe. Escolha outro.");
-      return;
+    // ===== ADM (Firebase Auth) =====
+    function toggleSenha() {
+      const inp = document.getElementById("adminPassword");
+      inp.type = inp.type === "password" ? "text" : "password";
     }
 
-    const aluno = dados[nipAntigo];
-    if (!aluno) return;
+    function entrarAdmin() {
+      const email = (document.getElementById("adminEmail").value || "").trim();
+      const senha = document.getElementById("adminPassword").value || "";
+      setMsg("adminMsg", "", "");
 
-    aluno.nome = nomeNovo;
+      if (!email || !senha) {
+        setMsg("adminMsg", "Preencha Email e Senha do ADM.", "error");
+        return;
+      }
+      if (!window.__fb) {
+        setMsg("adminMsg", "Firebase não carregou. Recarregue a página.", "error");
+        return;
+      }
 
-    if (nipNovo === nipAntigo) {
-      salvar();
-      listarAlunos(document.getElementById("buscaAluno").value.trim());
-      abrirAlunoDetalhe(nipAntigo);
-      atualizarNomeAuto();
-      return;
+      window.__fb.login(email, senha)
+        .then(() => {
+          // onAuthStateChanged vai assumir e abrir o ADM
+          setMsg("adminMsg", "Acesso liberado com sucesso.", "success");
+          document.getElementById("adminPassword").value = "";
+        })
+        .catch((err) => {
+          console.error("Erro login:", err);
+          setMsg("adminMsg", "Login inválido. Verifique email/senha.", "error");
+        });
     }
 
-    dados[nipNovo] = aluno;
-    delete dados[nipAntigo];
-    salvar();
-
-    listarAlunos(document.getElementById("buscaAluno").value.trim());
-    abrirAlunoDetalhe(nipNovo);
-    atualizarNomeAuto();
-
-    const consultado = document.getElementById("nipInput").value.trim();
-    if (consultado === nipAntigo) {
-      document.getElementById("nipInput").value = nipNovo;
-      buscarAnotacoes();
-    }
-  }
-
-  function removerAluno(nip) {
-    if (!confirm("Remover este aluno e TODAS as observações?")) return;
-    delete dados[nip];
-    salvar();
-
-    document.getElementById("detalheAluno").style.display = "none";
-    listarAlunos(document.getElementById("buscaAluno").value.trim());
-    atualizarNomeAuto();
-
-    if (document.getElementById("nipInput").value.trim() === nip) {
-      document.getElementById("nipInput").value = "";
-      document.getElementById("notesList").innerHTML = "";
-      document.getElementById("studentBox").style.display = "none";
-      setMsg("msg", "Aluno removido. Consulte outro N° de Bordo.", "success");
-    }
-  }
-
-  // ===== Observações =====
-  function atualizarNomeAuto() {
-    const nip = document.getElementById("obsNip").value.trim();
-    const box = document.getElementById("obsNomeAuto");
-    if (!box) return;
-    if (!nip) { box.textContent = "Nome: (digite um N° de Bordo cadastrado)"; return; }
-    if (!dados[nip]) { box.textContent = "Nome: (N° de Bordo não cadastrado)"; return; }
-    box.textContent = "Nome: " + dados[nip].nome;
-  }
-
-  function adicionarObservacao() {
-    const nip = document.getElementById("obsNip").value.trim();
-    const tipo = document.getElementById("obsTipo").value;
-    const texto = document.getElementById("obsTexto").value.trim();
-    setMsg("obsMsg", "", "");
-
-    if (!nip || !texto) { setMsg("obsMsg", "Preencha o N° de Bordo e o motivo da observação.", "error"); return; }
-    if (!dados[nip]) { setMsg("obsMsg", "Este N° de Bordo não está cadastrado. Cadastre o aluno antes.", "error"); return; }
-
-    dados[nip].notas = dados[nip].notas || [];
-    dados[nip].notas.unshift({ id: uid(), tipo, texto, criadoEm: agora(), atualizadoEm: null });
-
-    salvar();
-    setMsg("obsMsg", "Observação adicionada com sucesso.", "success");
-    document.getElementById("obsTexto").value = "";
-
-    if (document.getElementById("detalheAluno").style.display === "block") abrirAlunoDetalhe(nip);
-    if (document.getElementById("nipInput").value.trim() === nip) buscarAnotacoes();
-
-    listarAlunos(document.getElementById("buscaAluno").value.trim());
-  }
-
-  function editarObservacao(nip, obsId) {
-    const aluno = dados[nip];
-    if (!aluno) return;
-
-    const idx = (aluno.notas || []).findIndex(x => x.id === obsId);
-    if (idx < 0) return;
-
-    const atual = aluno.notas[idx];
-    const novoTexto = prompt("Edite o texto da observação:", atual.texto);
-    if (novoTexto === null) return;
-
-    const txt = novoTexto.trim();
-    if (!txt) { alert("Texto vazio não é permitido."); return; }
-
-    const novoTipo = prompt("Tipo (positiva ou negativa):", atual.tipo);
-    let tipo = (novoTipo || "").trim().toLowerCase();
-    if (tipo !== "positiva" && tipo !== "negativa") tipo = atual.tipo;
-
-    aluno.notas[idx].texto = txt;
-    aluno.notas[idx].tipo = tipo;
-    aluno.notas[idx].atualizadoEm = agora();
-    salvar();
-
-    abrirAlunoDetalhe(nip);
-    if (document.getElementById("nipInput").value.trim() === nip) buscarAnotacoes();
-  }
-
-  function removerObservacao(nip, obsId) {
-    if (!confirm("Remover esta observação?")) return;
-    const aluno = dados[nip];
-    if (!aluno) return;
-
-    aluno.notas = (aluno.notas || []).filter(x => x.id !== obsId);
-    salvar();
-
-    abrirAlunoDetalhe(nip);
-    if (document.getElementById("nipInput").value.trim() === nip) buscarAnotacoes();
-    listarAlunos(document.getElementById("buscaAluno").value.trim());
-  }
-
-  // Events
-  document.getElementById("nipInput").addEventListener("keypress", e => {
-    if (e.key === "Enter") buscarAnotacoes();
-  });
-  document.getElementById("adminPassword").addEventListener("keypress", e => {
-    if (e.key === "Enter") entrarAdmin();
-  });
-  document.getElementById("obsNip").addEventListener("input", atualizarNomeAuto);
-
-  // ✅ Realtime + seed automático se vazio
-  (function iniciarRealtime() {
-    const wait = setInterval(() => {
+    function sairAdmin() {
       if (!window.__fb) return;
-      clearInterval(wait);
 
-      window.__fb.escutar((novo) => {
-        // seed só quando for null/undefined
-        if ((novo === null || novo === undefined) && !seeded) {
-          seeded = true;
-          window.__fb.seedIfEmpty();
-          return;
-        }
-        dados = novo || {};
-        syncUIDepoisDeAtualizarDados();
+      window.__fb.logout().catch((err) => {
+        console.error("Erro logout:", err);
       });
-    }, 50);
-  })();
-</script>
+
+      // limpeza visual imediata
+      adminLogado = false;
+      document.getElementById("gearBar").style.display = "none";
+      document.getElementById("gearMenu").style.display = "none";
+      document.getElementById("alunosPanel").style.display = "none";
+      document.getElementById("addObsPanel").style.display = "none";
+      document.getElementById("detalheAluno").style.display = "none";
+      setMsg("adminMsg", "", "");
+      setMsg("cadMsg", "", "");
+      setMsg("obsMsg", "", "");
+    }
+
+    function toggleGearMenu() {
+      if (!adminLogado) return;
+      const m = document.getElementById("gearMenu");
+      m.style.display = (m.style.display === "block") ? "none" : "block";
+    }
+
+    function abrirAlunos() {
+      if (!adminLogado) { setMsg("adminMsg", "Faça login para acessar o ADM.", "error"); return; }
+      document.getElementById("alunosPanel").style.display = "block";
+      document.getElementById("addObsPanel").style.display = "none";
+      document.getElementById("detalheAluno").style.display = "none";
+      setMsg("cadMsg", "", "");
+      document.getElementById("filtroPelotao").value = filtroPelotaoAtual;
+      document.getElementById("ordemAlunos").value = ordemAtual;
+      listarAlunos();
+    }
+
+    function abrirAddObs() {
+      if (!adminLogado) { setMsg("adminMsg", "Faça login para acessar o ADM.", "error"); return; }
+      document.getElementById("addObsPanel").style.display = "block";
+      document.getElementById("alunosPanel").style.display = "none";
+      document.getElementById("detalheAluno").style.display = "none";
+      setMsg("obsMsg", "", "");
+      atualizarNomeAuto();
+    }
+
+    // ===== Cadastro aluno =====
+    function cadastrarAluno() {
+      if (!adminLogado) { setMsg("cadMsg", "Faça login para cadastrar aluno.", "error"); return; }
+
+      const nip = document.getElementById("cadNip").value.trim();
+      const nome = document.getElementById("cadNome").value.trim();
+      setMsg("cadMsg", "", "");
+
+      if (!nip || !nome) { setMsg("cadMsg", "Preencha N° de Bordo e Nome.", "error"); return; }
+      if (dados[nip]) { setMsg("cadMsg", "Esse N° de Bordo já está cadastrado.", "error"); return; }
+
+      dados[nip] = { nome, notas: [] };
+
+      salvarComTratamento("cadMsg")
+        .then(() => {
+          setMsg("cadMsg", "Aluno cadastrado com sucesso.", "success");
+          document.getElementById("cadNip").value = "";
+          document.getElementById("cadNome").value = "";
+          listarAlunos(document.getElementById("buscaAluno").value.trim());
+          atualizarNomeAuto();
+        });
+    }
+
+    // ===== Lista / Busca alunos =====
+    function listarAlunos(filtroTexto) {
+      const lista = document.getElementById("listaAlunos");
+      lista.innerHTML = "";
+
+      let entries = Object.entries(dados || {});
+      const f = (filtroTexto || "").toLowerCase();
+
+      if (filtroPelotaoAtual) {
+        entries = entries.filter(([nip]) => getPelotaoFromBordo(nip) === filtroPelotaoAtual);
+      }
+
+      if (f) {
+        entries = entries.filter(([nip, aluno]) => {
+          const nomeLower = (aluno.nome || "").toLowerCase();
+          return nomeLower.includes(f) || String(nip).includes(f);
+        });
+      }
+
+      if (ordemAtual === "numero") {
+        entries.sort((a, b) => Number(a[0]) - Number(b[0]));
+      } else {
+        entries.sort((a, b) => (a[1].nome || "").localeCompare(b[1].nome || ""));
+      }
+
+      if (entries.length === 0) {
+        lista.innerHTML = `<div class="note-card">Nenhum aluno encontrado com esses filtros.</div>`;
+        return;
+      }
+
+      entries.forEach(([nip, aluno]) => {
+        const pel = getPelotaoFromBordo(nip) || "--";
+        lista.innerHTML += `
+          <div class="student-item" onclick="abrirAlunoDetalhe('${escapeAttr(nip)}')">
+            <b>${escapeHtml(aluno.nome || ("Aluno " + nip))}</b><br/>
+            <span class="muted">Pelotão: ${escapeHtml(pel)} • N° de Bordo: ${escapeHtml(nip)} • Obs: ${(aluno.notas || []).length}</span>
+          </div>
+        `;
+      });
+    }
+
+    function filtrarAlunos() {
+      const f = document.getElementById("buscaAluno").value.trim();
+      listarAlunos(f);
+    }
+
+    function limparBusca() {
+      document.getElementById("buscaAluno").value = "";
+      listarAlunos("");
+    }
+
+    // ===== Detalhe aluno =====
+    function abrirAlunoDetalhe(nip) {
+      if (!adminLogado) return;
+
+      const aluno = dados[nip];
+      if (!aluno) return;
+
+      const box = document.getElementById("detalheAluno");
+      box.style.display = "block";
+
+      const notas = aluno.notas || [];
+
+      let html = `
+        <div class="card" style="background:#ffffff">
+          <div class="inline-title">Editar aluno</div>
+
+          <div class="row">
+            <input id="editNomeAluno" value="${escapeAttr(aluno.nome)}" placeholder="Nome do aluno" />
+            <input id="editNipAluno" value="${escapeAttr(nip)}" placeholder="N° de Bordo do aluno" />
+          </div>
+
+          <div class="row">
+            <button onclick="salvarNomeNipAluno('${escapeAttr(nip)}')">Salvar alterações</button>
+            <button class="btn-danger" onclick="removerAluno('${escapeAttr(nip)}')">Remover aluno</button>
+          </div>
+
+          <div class="muted">* Ao editar o N° de Bordo, as observações vão junto para o novo N° de Bordo.</div>
+        </div>
+
+        <div class="inline-title" style="margin:10px 0;">Observações</div>
+      `;
+
+      if (notas.length === 0) {
+        html += `<div class="note-card">Sem observações para este aluno.</div>`;
+      } else {
+        notas.forEach(n => {
+          const stamp = n.atualizadoEm ? `Editado em: ${n.atualizadoEm}` : `Adicionado em: ${n.criadoEm}`;
+          html += `
+            <div class="note-card">
+              <div class="note-header">
+                <span class="badge ${n.tipo === "positiva" ? "positive" : "negative"}">${escapeHtml(n.tipo)}</span>
+                <span class="stamp">${escapeHtml(stamp)}</span>
+              </div>
+              <div>${escapeHtml(n.texto)}</div>
+
+              <div class="actions">
+                <button class="btn-secondary" onclick="editarObservacao('${escapeAttr(nip)}','${escapeAttr(n.id)}')">Editar</button>
+                <button class="btn-danger" onclick="removerObservacao('${escapeAttr(nip)}','${escapeAttr(n.id)}')">Remover</button>
+              </div>
+            </div>
+          `;
+        });
+      }
+
+      box.innerHTML = html;
+    }
+
+    function salvarNomeNipAluno(nipAntigo) {
+      if (!adminLogado) return;
+
+      const nomeNovo = (document.getElementById("editNomeAluno").value || "").trim();
+      const nipNovo = (document.getElementById("editNipAluno").value || "").trim();
+
+      if (!nomeNovo) { alert("Digite um nome válido."); return; }
+      if (!nipNovo) { alert("Digite um N° de Bordo válido."); return; }
+
+      if (nipNovo !== nipAntigo && dados[nipNovo]) {
+        alert("Esse N° de Bordo já existe. Escolha outro.");
+        return;
+      }
+
+      const aluno = dados[nipAntigo];
+      if (!aluno) return;
+
+      aluno.nome = nomeNovo;
+
+      if (nipNovo === nipAntigo) {
+        salvarComTratamento("adminMsg").then(() => {
+          listarAlunos(document.getElementById("buscaAluno").value.trim());
+          abrirAlunoDetalhe(nipAntigo);
+          atualizarNomeAuto();
+        });
+        return;
+      }
+
+      dados[nipNovo] = aluno;
+      delete dados[nipAntigo];
+
+      salvarComTratamento("adminMsg").then(() => {
+        listarAlunos(document.getElementById("buscaAluno").value.trim());
+        abrirAlunoDetalhe(nipNovo);
+        atualizarNomeAuto();
+
+        const consultado = document.getElementById("nipInput").value.trim();
+        if (consultado === nipAntigo) {
+          document.getElementById("nipInput").value = nipNovo;
+          buscarAnotacoes();
+        }
+      });
+    }
+
+    function removerAluno(nip) {
+      if (!adminLogado) return;
+
+      if (!confirm("Remover este aluno e TODAS as observações?")) return;
+      delete dados[nip];
+
+      salvarComTratamento("adminMsg").then(() => {
+        document.getElementById("detalheAluno").style.display = "none";
+        listarAlunos(document.getElementById("buscaAluno").value.trim());
+        atualizarNomeAuto();
+
+        if (document.getElementById("nipInput").value.trim() === nip) {
+          document.getElementById("nipInput").value = "";
+          document.getElementById("notesList").innerHTML = "";
+          document.getElementById("studentBox").style.display = "none";
+          setMsg("msg", "Aluno removido. Consulte outro N° de Bordo.", "success");
+        }
+      });
+    }
+
+    // ===== Observações =====
+    function atualizarNomeAuto() {
+      const nip = document.getElementById("obsNip").value.trim();
+      const box = document.getElementById("obsNomeAuto");
+      if (!box) return;
+      if (!nip) { box.textContent = "Nome: (digite um N° de Bordo cadastrado)"; return; }
+      if (!dados[nip]) { box.textContent = "Nome: (N° de Bordo não cadastrado)"; return; }
+      box.textContent = "Nome: " + dados[nip].nome;
+    }
+
+    function adicionarObservacao() {
+      if (!adminLogado) { setMsg("obsMsg", "Faça login para adicionar observação.", "error"); return; }
+
+      const nip = document.getElementById("obsNip").value.trim();
+      const tipo = document.getElementById("obsTipo").value;
+      const texto = document.getElementById("obsTexto").value.trim();
+      setMsg("obsMsg", "", "");
+
+      if (!nip || !texto) { setMsg("obsMsg", "Preencha o N° de Bordo e o motivo da observação.", "error"); return; }
+      if (!dados[nip]) { setMsg("obsMsg", "Este N° de Bordo não está cadastrado. Cadastre o aluno antes.", "error"); return; }
+
+      dados[nip].notas = dados[nip].notas || [];
+      dados[nip].notas.unshift({ id: uid(), tipo, texto, criadoEm: agora(), atualizadoEm: null });
+
+      salvarComTratamento("obsMsg").then(() => {
+        setMsg("obsMsg", "Observação adicionada com sucesso.", "success");
+        document.getElementById("obsTexto").value = "";
+
+        if (document.getElementById("detalheAluno").style.display === "block") abrirAlunoDetalhe(nip);
+        if (document.getElementById("nipInput").value.trim() === nip) buscarAnotacoes();
+
+        listarAlunos(document.getElementById("buscaAluno").value.trim());
+      });
+    }
+
+    function editarObservacao(nip, obsId) {
+      if (!adminLogado) return;
+
+      const aluno = dados[nip];
+      if (!aluno) return;
+
+      const idx = (aluno.notas || []).findIndex(x => x.id === obsId);
+      if (idx < 0) return;
+
+      const atual = aluno.notas[idx];
+      const novoTexto = prompt("Edite o texto da observação:", atual.texto);
+      if (novoTexto === null) return;
+
+      const txt = novoTexto.trim();
+      if (!txt) { alert("Texto vazio não é permitido."); return; }
+
+      const novoTipo = prompt("Tipo (positiva ou negativa):", atual.tipo);
+      let tipo = (novoTipo || "").trim().toLowerCase();
+      if (tipo !== "positiva" && tipo !== "negativa") tipo = atual.tipo;
+
+      aluno.notas[idx].texto = txt;
+      aluno.notas[idx].tipo = tipo;
+      aluno.notas[idx].atualizadoEm = agora();
+
+      salvarComTratamento("adminMsg").then(() => {
+        abrirAlunoDetalhe(nip);
+        if (document.getElementById("nipInput").value.trim() === nip) buscarAnotacoes();
+      });
+    }
+
+    function removerObservacao(nip, obsId) {
+      if (!adminLogado) return;
+
+      if (!confirm("Remover esta observação?")) return;
+      const aluno = dados[nip];
+      if (!aluno) return;
+
+      aluno.notas = (aluno.notas || []).filter(x => x.id !== obsId);
+
+      salvarComTratamento("adminMsg").then(() => {
+        abrirAlunoDetalhe(nip);
+        if (document.getElementById("nipInput").value.trim() === nip) buscarAnotacoes();
+        listarAlunos(document.getElementById("buscaAluno").value.trim());
+      });
+    }
+
+    // Events
+    document.getElementById("nipInput").addEventListener("keypress", e => {
+      if (e.key === "Enter") buscarAnotacoes();
+    });
+    document.getElementById("adminPassword").addEventListener("keypress", e => {
+      if (e.key === "Enter") entrarAdmin();
+    });
+    document.getElementById("adminEmail").addEventListener("keypress", e => {
+      if (e.key === "Enter") entrarAdmin();
+    });
+    document.getElementById("obsNip").addEventListener("input", atualizarNomeAuto);
+
+    // ✅ Realtime + seed automático se vazio
+    (function iniciarRealtime() {
+      const wait = setInterval(() => {
+        if (!window.__fb) return;
+        clearInterval(wait);
+
+        // 🔐 Estado do login (mostra/esconde ADM)
+        window.__fb.onAuth((user) => {
+          adminLogado = !!user;
+
+          const gearBar = document.getElementById("gearBar");
+          const gearMenu = document.getElementById("gearMenu");
+
+          if (adminLogado) {
+            gearBar.style.display = "flex";
+          } else {
+            gearBar.style.display = "none";
+            gearMenu.style.display = "none";
+            document.getElementById("alunosPanel").style.display = "none";
+            document.getElementById("addObsPanel").style.display = "none";
+            document.getElementById("detalheAluno").style.display = "none";
+          }
+        });
+
+        // 📡 Escuta do banco
+        window.__fb.escutar((novo) => {
+          // seed só quando for null/undefined
+          if ((novo === null || novo === undefined) && !seeded) {
+            seeded = true;
+            window.__fb.seedIfEmpty().catch((err) => {
+              console.error("Erro no seed:", err);
+            });
+            return;
+          }
+          dados = novo || {};
+          syncUIDepoisDeAtualizarDados();
+        });
+      }, 50);
+    })();
+  </script>
 
 </body>
 </html>
