@@ -165,8 +165,16 @@
       background: #f8fbff;
       cursor: pointer;
       margin-bottom: 8px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
     }
     .student-item:hover { background: #eef4ff; }
+
+    .student-item-info {
+      min-width: 0;
+      flex: 1;
+    }
 
     /* Label like field */
     .hint {
@@ -186,9 +194,96 @@
     }
     .filters > * { flex: 1; min-width: 220px; }
 
+    /* Fotos dos alunos */
+    .student-profile {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .student-photo,
+    .student-photo-sm,
+    .student-photo-lg,
+    .photo-fallback,
+    .photo-fallback-sm,
+    .photo-fallback-lg {
+      border-radius: 14px;
+      object-fit: cover;
+      background: #dbe7fb;
+      border: 2px solid #d0def3;
+      box-shadow: 0 6px 18px rgba(11,44,95,0.12);
+      flex-shrink: 0;
+    }
+
+    .student-photo,
+    .photo-fallback {
+      width: 110px;
+      height: 110px;
+    }
+
+    .student-photo-lg,
+    .photo-fallback-lg {
+      width: 120px;
+      height: 120px;
+    }
+
+    .student-photo-sm,
+    .photo-fallback-sm {
+      width: 56px;
+      height: 56px;
+      border-radius: 12px;
+    }
+
+    .photo-fallback,
+    .photo-fallback-sm,
+    .photo-fallback-lg {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #0b2c5f;
+      font-weight: bold;
+      text-align: center;
+      padding: 8px;
+      line-height: 1.1;
+      background: linear-gradient(135deg, #e8f0ff, #d7e7ff);
+    }
+
+    .student-main-info {
+      flex: 1;
+      min-width: 220px;
+    }
+
+    .student-meta {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    .mini-badge {
+      background: #fff;
+      border: 1px solid #d7e0ec;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      color: #0b2c5f;
+      font-weight: bold;
+    }
+
     @media (max-width: 640px) {
       .container { padding: 18px; }
       h1 { font-size: 24px; }
+      .student-profile {
+        align-items: flex-start;
+      }
+      .student-photo,
+      .photo-fallback,
+      .student-photo-lg,
+      .photo-fallback-lg {
+        width: 92px;
+        height: 92px;
+      }
     }
   </style>
 </head>
@@ -534,12 +629,12 @@
         return onValue(dadosRef, (snap) => callback(snap.val()));
       },
 
-      // gravação (vai falhar se não estiver logado e as Rules estiverem ".write": "auth != null")
+      // gravação
       salvar(dados) {
         return set(dadosRef, dados);
       },
 
-      // seed (somente quando banco está vazio)
+      // seed
       seedIfEmpty() {
         return set(dadosRef, DEFAULT_DADOS);
       },
@@ -566,12 +661,17 @@
     let filtroPelotaoAtual = "";
     let ordemAtual = "alfabetica";
 
+    // ✅ URL base das fotos no GitHub
+    const FOTO_BASE_URL = "https://raw.githubusercontent.com/EAMPE11/EAMPE-Rodrigues/main/fotos";
+
     function uid() {
       return Math.random().toString(16).slice(2) + "-" + Date.now().toString(16);
     }
+
     function agora() {
       return new Date().toLocaleString();
     }
+
     function escapeHtml(str) {
       return String(str ?? "")
         .replaceAll("&", "&amp;")
@@ -580,9 +680,11 @@
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
     }
+
     function escapeAttr(str) {
       return escapeHtml(str).replaceAll("`", "&#096;");
     }
+
     function classeTipoNota(tipo) {
       const t = String(tipo || "").trim().toLowerCase();
       if (t === "bravo zulu") return "tipo-bravo-zulu";
@@ -603,7 +705,6 @@
       return window.__fb.salvar(dados).catch((err) => {
         console.error("Erro ao salvar no Firebase:", err);
         const code = (err && err.code) ? String(err.code) : "";
-        // Quando Rules bloqueiam, normalmente vem PERMISSION_DENIED
         if (code.includes("PERMISSION_DENIED")) {
           setMsg(msgElId || "adminMsg", "Sem permissão para salvar. Faça login de ADM.", "error");
         } else {
@@ -616,7 +717,55 @@
     function getPelotaoFromBordo(nip) {
       const s = String(nip || "").trim();
       if (s.length < 2) return "";
-      return s.slice(0, 2); // 1101 -> "11"
+      return s.slice(0, 2);
+    }
+
+    // ===== Fotos =====
+    function getFotoAlunoUrl(nip) {
+      const n = String(nip || "").trim();
+      return `${FOTO_BASE_URL}/${encodeURIComponent(n)}.jpg`;
+    }
+
+    function getIniciais(nome) {
+      const partes = String(nome || "")
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+
+      if (!partes.length) return "AL";
+
+      if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
+
+      return (partes[0][0] + partes[1][0]).toUpperCase();
+    }
+
+    function getFotoOuFallbackHTML(nip, nome, tamanho = "normal") {
+      const nomeSeguro = escapeHtml(nome || ("Aluno " + nip));
+      const nipSeguro = escapeAttr(nip);
+      const fotoUrl = escapeAttr(getFotoAlunoUrl(nip));
+      const iniciais = escapeHtml(getIniciais(nome));
+
+      let imgClass = "student-photo";
+      let fallbackClass = "photo-fallback";
+
+      if (tamanho === "sm") {
+        imgClass = "student-photo-sm";
+        fallbackClass = "photo-fallback-sm";
+      } else if (tamanho === "lg") {
+        imgClass = "student-photo-lg";
+        fallbackClass = "photo-fallback-lg";
+      }
+
+      return `
+        <img
+          src="${fotoUrl}"
+          alt="Foto de ${nomeSeguro}"
+          class="${imgClass}"
+          loading="lazy"
+          referrerpolicy="no-referrer"
+          onerror="this.outerHTML='<div class=&quot;${fallbackClass}&quot; title=&quot;Sem foto disponível&quot;>${iniciais}</div>'"
+        />
+      `;
     }
 
     function aplicarFiltrosAlunos() {
@@ -657,16 +806,34 @@
       document.getElementById("studentBox").style.display = "none";
       setMsg("msg", "", "");
 
-      if (!nip) { setMsg("msg", "Por favor, digite um N° de Bordo.", "error"); return; }
+      if (!nip) {
+        setMsg("msg", "Por favor, digite um N° de Bordo.", "error");
+        return;
+      }
 
       const aluno = dados[nip];
-      if (!aluno) { setMsg("msg", "N° de Bordo não encontrado.", "error"); return; }
+      if (!aluno) {
+        setMsg("msg", "N° de Bordo não encontrado.", "error");
+        return;
+      }
 
       setMsg("msg", "Anotações encontradas com sucesso.", "success");
 
       const sb = document.getElementById("studentBox");
       sb.style.display = "block";
-      sb.innerHTML = `<div class="inline-title">${escapeHtml(aluno.nome)}</div><div><b>N° de Bordo:</b> ${escapeHtml(nip)}</div>`;
+      sb.innerHTML = `
+        <div class="student-profile">
+          ${getFotoOuFallbackHTML(nip, aluno.nome, "normal")}
+          <div class="student-main-info">
+            <div class="inline-title">${escapeHtml(aluno.nome)}</div>
+            <div class="student-meta">
+              <span class="mini-badge">N° de Bordo: ${escapeHtml(nip)}</span>
+              <span class="mini-badge">Pelotão: ${escapeHtml(getPelotaoFromBordo(nip) || "--")}</span>
+              <span class="mini-badge">Observações: ${(aluno.notas || []).length}</span>
+            </div>
+          </div>
+        </div>
+      `;
 
       renderNotasPublico(nip);
     }
@@ -718,7 +885,6 @@
 
       window.__fb.login(email, senha)
         .then(() => {
-          // onAuthStateChanged vai assumir e abrir o ADM
           setMsg("adminMsg", "Acesso liberado com sucesso.", "success");
           document.getElementById("adminPassword").value = "";
         })
@@ -735,7 +901,6 @@
         console.error("Erro logout:", err);
       });
 
-      // limpeza visual imediata
       adminLogado = false;
       document.getElementById("gearBar").style.display = "none";
       document.getElementById("gearMenu").style.display = "none";
@@ -754,7 +919,10 @@
     }
 
     function abrirAlunos() {
-      if (!adminLogado) { setMsg("adminMsg", "Faça login para acessar o ADM.", "error"); return; }
+      if (!adminLogado) {
+        setMsg("adminMsg", "Faça login para acessar o ADM.", "error");
+        return;
+      }
       document.getElementById("alunosPanel").style.display = "block";
       document.getElementById("addObsPanel").style.display = "none";
       document.getElementById("detalheAluno").style.display = "none";
@@ -765,7 +933,10 @@
     }
 
     function abrirAddObs() {
-      if (!adminLogado) { setMsg("adminMsg", "Faça login para acessar o ADM.", "error"); return; }
+      if (!adminLogado) {
+        setMsg("adminMsg", "Faça login para acessar o ADM.", "error");
+        return;
+      }
       document.getElementById("addObsPanel").style.display = "block";
       document.getElementById("alunosPanel").style.display = "none";
       document.getElementById("detalheAluno").style.display = "none";
@@ -775,14 +946,23 @@
 
     // ===== Cadastro aluno =====
     function cadastrarAluno() {
-      if (!adminLogado) { setMsg("cadMsg", "Faça login para cadastrar aluno.", "error"); return; }
+      if (!adminLogado) {
+        setMsg("cadMsg", "Faça login para cadastrar aluno.", "error");
+        return;
+      }
 
       const nip = document.getElementById("cadNip").value.trim();
       const nome = document.getElementById("cadNome").value.trim();
       setMsg("cadMsg", "", "");
 
-      if (!nip || !nome) { setMsg("cadMsg", "Preencha N° de Bordo e Nome.", "error"); return; }
-      if (dados[nip]) { setMsg("cadMsg", "Esse N° de Bordo já está cadastrado.", "error"); return; }
+      if (!nip || !nome) {
+        setMsg("cadMsg", "Preencha N° de Bordo e Nome.", "error");
+        return;
+      }
+      if (dados[nip]) {
+        setMsg("cadMsg", "Esse N° de Bordo já está cadastrado.", "error");
+        return;
+      }
 
       dados[nip] = { nome, notas: [] };
 
@@ -830,8 +1010,11 @@
         const pel = getPelotaoFromBordo(nip) || "--";
         lista.innerHTML += `
           <div class="student-item" onclick="abrirAlunoDetalhe('${escapeAttr(nip)}')">
-            <b>${escapeHtml(aluno.nome || ("Aluno " + nip))}</b><br/>
-            <span class="muted">Pelotão: ${escapeHtml(pel)} • N° de Bordo: ${escapeHtml(nip)} • Obs: ${(aluno.notas || []).length}</span>
+            ${getFotoOuFallbackHTML(nip, aluno.nome, "sm")}
+            <div class="student-item-info">
+              <b>${escapeHtml(aluno.nome || ("Aluno " + nip))}</b><br/>
+              <span class="muted">Pelotão: ${escapeHtml(pel)} • N° de Bordo: ${escapeHtml(nip)} • Obs: ${(aluno.notas || []).length}</span>
+            </div>
           </div>
         `;
       });
@@ -861,6 +1044,18 @@
 
       let html = `
         <div class="card" style="background:#ffffff">
+          <div class="student-profile" style="margin-bottom:14px;">
+            ${getFotoOuFallbackHTML(nip, aluno.nome, "lg")}
+            <div class="student-main-info">
+              <div class="inline-title">${escapeHtml(aluno.nome)}</div>
+              <div class="student-meta">
+                <span class="mini-badge">N° de Bordo: ${escapeHtml(nip)}</span>
+                <span class="mini-badge">Pelotão: ${escapeHtml(getPelotaoFromBordo(nip) || "--")}</span>
+                <span class="mini-badge">Observações: ${(aluno.notas || []).length}</span>
+              </div>
+            </div>
+          </div>
+
           <div class="inline-title">Editar aluno</div>
 
           <div class="row">
@@ -973,21 +1168,36 @@
       const nip = document.getElementById("obsNip").value.trim();
       const box = document.getElementById("obsNomeAuto");
       if (!box) return;
-      if (!nip) { box.textContent = "Nome: (digite um N° de Bordo cadastrado)"; return; }
-      if (!dados[nip]) { box.textContent = "Nome: (N° de Bordo não cadastrado)"; return; }
+      if (!nip) {
+        box.textContent = "Nome: (digite um N° de Bordo cadastrado)";
+        return;
+      }
+      if (!dados[nip]) {
+        box.textContent = "Nome: (N° de Bordo não cadastrado)";
+        return;
+      }
       box.textContent = "Nome: " + dados[nip].nome;
     }
 
     function adicionarObservacao() {
-      if (!adminLogado) { setMsg("obsMsg", "Faça login para adicionar observação.", "error"); return; }
+      if (!adminLogado) {
+        setMsg("obsMsg", "Faça login para adicionar observação.", "error");
+        return;
+      }
 
       const nip = document.getElementById("obsNip").value.trim();
       const tipo = document.getElementById("obsTipo").value;
       const texto = document.getElementById("obsTexto").value.trim();
       setMsg("obsMsg", "", "");
 
-      if (!nip || !texto) { setMsg("obsMsg", "Preencha o N° de Bordo e o motivo da observação.", "error"); return; }
-      if (!dados[nip]) { setMsg("obsMsg", "Este N° de Bordo não está cadastrado. Cadastre o aluno antes.", "error"); return; }
+      if (!nip || !texto) {
+        setMsg("obsMsg", "Preencha o N° de Bordo e o motivo da observação.", "error");
+        return;
+      }
+      if (!dados[nip]) {
+        setMsg("obsMsg", "Este N° de Bordo não está cadastrado. Cadastre o aluno antes.", "error");
+        return;
+      }
 
       dados[nip].notas = dados[nip].notas || [];
       dados[nip].notas.unshift({ id: uid(), tipo, texto, criadoEm: agora(), atualizadoEm: null });
@@ -1054,12 +1264,15 @@
     document.getElementById("nipInput").addEventListener("keypress", e => {
       if (e.key === "Enter") buscarAnotacoes();
     });
+
     document.getElementById("adminPassword").addEventListener("keypress", e => {
       if (e.key === "Enter") entrarAdmin();
     });
+
     document.getElementById("adminEmail").addEventListener("keypress", e => {
       if (e.key === "Enter") entrarAdmin();
     });
+
     document.getElementById("obsNip").addEventListener("input", atualizarNomeAuto);
 
     // ✅ Realtime + seed automático se vazio
@@ -1068,7 +1281,7 @@
         if (!window.__fb) return;
         clearInterval(wait);
 
-        // 🔐 Estado do login (mostra/esconde ADM)
+        // 🔐 Estado do login
         window.__fb.onAuth((user) => {
           adminLogado = !!user;
 
@@ -1088,7 +1301,6 @@
 
         // 📡 Escuta do banco
         window.__fb.escutar((novo) => {
-          // seed só quando for null/undefined
           if ((novo === null || novo === undefined) && !seeded) {
             seeded = true;
             window.__fb.seedIfEmpty().catch((err) => {
@@ -1105,4 +1317,3 @@
 
 </body>
 </html>
-
